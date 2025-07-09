@@ -3,13 +3,10 @@
 //  https://github.com/jathu/UIImageColors
 //
 //  Created by Jathu Satkunarajah (@jathu) on 2015-06-11 - Toronto
-//  Based on Cocoa version by Panic Inc. - Portland
 //
 
 #if os(OSX)
     import AppKit
-    public typealias UIImage = NSImage
-    public typealias UIColor = NSColor
 #else
     import UIKit
 #endif
@@ -228,14 +225,39 @@ extension UIImage {
         
         guard let resizedImage = self.resizeForUIImageColors(newSize: scaleDownSize) else { return nil }
 
+        // Create a CGImage with CGBitmapInfo: premultipliedFirst, byteOrder32Little
+        let width = Int(resizedImage.size.width)
+        let height = Int(resizedImage.size.height)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitsPerComponent = 8
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        let bitmapInfo: CGBitmapInfo = [.byteOrder32Little, CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)]
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: bitsPerComponent,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo.rawValue
+        ) else {
+            fatalError("Failed to create CGContext with requested bitmap info.")
+        }
         #if os(OSX)
-            guard let cgImage = resizedImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+            let graphicsContext = NSGraphicsContext(cgContext: context, flipped: false)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = graphicsContext
+            resizedImage.draw(in: CGRect(x: 0, y: 0, width: width, height: height), from: .zero, operation: .copy, fraction: 1.0)
+            NSGraphicsContext.restoreGraphicsState()
         #else
-            guard let cgImage = resizedImage.cgImage else { return nil }
+            UIGraphicsPushContext(context)
+            resizedImage.draw(in: CGRect(x: 0, y: 0, width: width, height: height))
+            UIGraphicsPopContext()
         #endif
-        
-        let width: Int = cgImage.width
-        let height: Int = cgImage.height
+        guard let cgImage = context.makeImage() else {
+            fatalError("Failed to make cgImage from context with requested bitmap info.")
+        }
         
         let threshold = Int(CGFloat(height)*0.01)
         var proposed: [Double] = [-1,-1,-1,-1]
@@ -247,7 +269,7 @@ extension UIImage {
         let imageColors = NSCountedSet(capacity: width*height)
         for x in 0..<width {
             for y in 0..<height {
-                let pixel: Int = (y * cgImage.bytesPerRow) + (x * 4)
+                let pixel: Int = ((width * y) + x) * 4
                 if 127 <= data[pixel+3] {
                     imageColors.add((Double(data[pixel+2])*1000000)+(Double(data[pixel+1])*1000)+(Double(data[pixel])))
                 }
@@ -347,4 +369,3 @@ extension UIImage {
         )
     }
 }
-
