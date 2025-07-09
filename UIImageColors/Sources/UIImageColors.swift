@@ -7,6 +7,8 @@
 
 #if os(OSX)
     import AppKit
+    public typealias UIImage = NSImage
+    public typealias UIColor = NSColor
 #else
     import UIKit
 #endif
